@@ -10335,7 +10335,7 @@ async function withReplyDispatcher(params) {
 		}
 	}
 }
-const OWNER_FORWARD_RE = /\b(?:tell|msg|message|pass|say)\s+moritz\b[:,-]?\s*(.+)$/i;
+const OWNER_FORWARD_RE = /\b(?:tell|msg|message|pass|say|sag|sagt|sagte|sagen|schreib|schreibt|schrieb|schreiben|sende|sendet|schick|schickt|schickte|schicken|gib\s+bescheid|geb\s+bescheid|gibt\s+bescheid|informier|informiere|informiert|erzaehl|erzaehle|erzaehlt|erzähl|erzähle|erzählt|ruf|ruft|rufe|bitte\s+sag|kannst\s+du\s+sagen|koenntest\s+du\s+sagen|könntest\s+du\s+sagen)\s+(?:dem\s+)?moritz\b[:,-]?\s*(.+)$/i;
 function extractOwnerForwardText(body) {
 	const text = (body ?? "").trim();
 	if (!text) return;
