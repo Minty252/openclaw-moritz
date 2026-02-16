@@ -10335,8 +10335,85 @@ async function withReplyDispatcher(params) {
 		}
 	}
 }
+const OWNER_FORWARD_RE = /\b(?:tell|msg|message|pass|say)\s+moritz\b[:,-]?\s*(.+)$/i;
+function extractOwnerForwardText(body) {
+	const text = (body ?? "").trim();
+	if (!text) return;
+	const match = text.match(OWNER_FORWARD_RE);
+	if (!match) return;
+	const payload = (match[1] ?? "").trim();
+	return payload || void 0;
+}
+async function maybeForwardOwnerDirective(params) {
+	const { ctx, cfg } = params;
+	const payload = extractOwnerForwardText(ctx.BodyForAgent ?? ctx.Body ?? "");
+	if (!payload) return false;
+	const auth = resolveCommandAuthorization({
+		ctx,
+		cfg,
+		commandAuthorized: ctx.CommandAuthorized === true
+	});
+	if (auth.senderIsOwner) return false;
+	const providerId = auth.providerId ?? resolveProviderFromContext(ctx, cfg);
+	if (!providerId) return false;
+	const dock = getChannelDock(providerId);
+	const ownerTarget = auth.ownerList?.[0] ?? normalizeAllowFromEntry({
+		dock,
+		cfg,
+		accountId: ctx.AccountId,
+		value: ctx.To
+	})?.[0];
+	if (!ownerTarget) return false;
+	const senderLabel = resolveSenderLabel({
+		name: ctx.SenderName,
+		username: ctx.SenderUsername,
+		tag: ctx.SenderTag,
+		e164: ctx.SenderE164,
+		id: auth.senderId
+	});
+	const conversationLabel = (ctx.ConversationLabel || ctx.GroupSubject || ctx.GroupChannel || "").trim();
+	const header = senderLabel ? `From ${senderLabel}` : "From a contact";
+	const convoSuffix = conversationLabel ? ` (${conversationLabel})` : "";
+	await runMessageAction({
+		cfg,
+		action: "send",
+		params: {
+			channel: providerId,
+			target: ownerTarget,
+			message: `\ud83e\uddfe ${header}${convoSuffix}:\n${payload}`
+		},
+		toolContext: {
+			currentChannelProvider: providerId,
+			currentChannelId: ownerTarget
+		}
+	});
+	const senderTargetRaw = auth.senderId ?? auth.from;
+	const senderTarget = senderTargetRaw ? normalizeAllowFromEntry({
+		dock,
+		cfg,
+		accountId: ctx.AccountId,
+		value: senderTargetRaw
+	})?.[0] ?? senderTargetRaw : void 0;
+	if (senderTarget) {
+		await runMessageAction({
+			cfg,
+			action: "send",
+			params: {
+				channel: providerId,
+				target: senderTarget,
+				message: "Got it — I'll pass that to Moritz."
+			},
+			toolContext: {
+				currentChannelProvider: providerId,
+				currentChannelId: senderTarget
+			}
+		});
+	}
+	return true;
+}
 async function dispatchInboundMessage(params) {
 	const finalized = finalizeInboundContext(params.ctx);
+	if (await maybeForwardOwnerDirective({ ctx: finalized, cfg: params.cfg })) return;
 	return await withReplyDispatcher({
 		dispatcher: params.dispatcher,
 		run: () => dispatchReplyFromConfig({
